@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+/* Erzwinge helles Farbschema */
+:root { color-scheme: light; }
+
+html, body, #root { height: 100%; }
+
+/* Grundfarben/Flächen */
+body {
+  background: #f8fafc; /* slate-50 */
+  color: #0f172a;      /* slate-900 */
+}
+
+/* Alle Hilfsklassen in @layer components, damit Tailwind-Utilities (Hover/Active/…)
+   die höhere Priorität behalten und sichtbar sind. */
+@layer components {
+  /* Karten & Buttons (hell) */
+  .card       { @apply rounded-2xl border border-slate-200 bg-white shadow-sm; }
+  .card-muted { @apply rounded-2xl border border-slate-200 bg-slate-100 text-slate-500; }
+
+  .btn         { @apply rounded-xl px-5 py-2.5 text-sm font-semibold shadow-sm transition-colors; }
+  .btn-primary { @apply bg-blue-600 text-white hover:bg-blue-700; }
+  .btn-disabled{ @apply bg-slate-300 text-slate-600; }
+
+  /* Typografie/Abstände sauber, kein Überlaufen */
+  .h1         { @apply text-4xl sm:text-5xl font-extrabold tracking-tight; }
+  .step-title { @apply text-xl font-semibold; }
+  .text-muted { @apply text-sm text-slate-700; }
+  .wrap       { @apply break-words whitespace-normal; } /* bricht lange Wörter */
+  .ellipsis   { @apply truncate; }                      /* einzeilig mit …   */
+
+  /* Einheitliche Innenabstände der Karten */
+  .card-pad   { @apply p-4; }
+
+  /* Indikatorpunkte */
+  .dot        { @apply ml-3 mt-1 h-2.5 w-2.5 rounded-full bg-slate-300; }
+  .dot-blue   { @apply bg-blue-600; }
+  .dot-emera  { @apply bg-emerald-300; } /* (Name verkürzt, falls Editor meckert) */
+}
