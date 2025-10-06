@@ -15,7 +15,7 @@ export default function App() {
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [selectedSlot, setSelectedSlot] = useState(null); // {date, time}
+  const [selectedSlots, setSelectedSlots] = useState([]); // [{date,time}, …]
 
   const [bookingState, setBookingState] = useState({
     status: "idle",
@@ -62,7 +62,7 @@ export default function App() {
       setSlotsLoading(true);
       setSlotsError("");
       setSlots([]);
-      setSelectedSlot(null);
+      setSelectedSlots([]);
       try {
         const res = await fetch(
           `${SCRIPT_URL}?fn=slots&course=${encodeURIComponent(
@@ -93,8 +93,13 @@ export default function App() {
   }, [selectedCourse]);
 
   const canSubmit = useMemo(
-    () => selectedCourse && selectedSlot && firstName.trim() && lastName.trim(),
-    [selectedCourse, selectedSlot, firstName, lastName]
+    () =>
+      selectedCourse &&
+      selectedSlots.length > 0 &&
+      selectedSlots.length <= 6 &&
+      firstName.trim() &&
+      lastName.trim(),
+    [selectedCourse, selectedSlots, firstName, lastName]
   );
 
   async function book() {
@@ -105,9 +110,9 @@ export default function App() {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         course: selectedCourse,
-        date: selectedSlot.date, // TT.MM.JJJJ
-        time: selectedSlot.time, // HH:MM
+        slots: selectedSlots, // [{date, time}, …]
       });
+
       const res = await fetch(SCRIPT_URL, { method: "POST", body });
       const txt = await res.text();
       let data;
@@ -116,37 +121,35 @@ export default function App() {
       } catch {
         throw new Error(`Ungültige Antwort: ${txt.slice(0, 200)}`);
       }
+
       if (!res.ok || !data.ok) {
-        const map = {
-          ALREADY_BOOKED:
-            "Diese Person ist für diesen Termin bereits eingetragen.",
-          SLOT_FULL: "Termin ist leider voll.",
-          UNKNOWN_SLOT: "Unbekannter Termin.",
-          FIELDS_MISSING: "Bitte alle Felder ausfüllen.",
-        };
-        throw new Error(
-          map[data?.error] ||
-            data?.error ||
-            data?.message ||
-            "Buchung fehlgeschlagen"
-        );
+        // Zeige kurze Zusammenfassung, Backend liefert results[]
+        if (data?.error === "TOO_MANY_SLOTS") {
+          throw new Error("Maximal 6 Termine pro Buchung.");
+        }
+        const msg = data?.summary
+          ? `Gebucht: ${data.summary.ok}, fehlgeschlagen: ${data.summary.fail}`
+          : data?.message || "Buchung fehlgeschlagen";
+        setBookingState({ status: "error", message: msg });
+      } else {
+        setBookingState({
+          status: "success",
+          message: `Gebucht: ${data.summary.ok}, fehlgeschlagen: ${data.summary.fail}`,
+        });
+        setLastBooking({
+          course: selectedCourse,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          slots: data.results.map((r) => ({
+            ...r.slot,
+            ok: r.ok,
+            error: r.error,
+          })),
+        });
+        setShowSuccess(true);
       }
-      setBookingState({
-        status: "success",
-        message: "Erfolgreich eingetragen!",
-      });
 
-      // Infos für das Popup merken
-      setLastBooking({
-        course: selectedCourse,
-        date: selectedSlot.date,
-        time: selectedSlot.time,
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-      });
-      setShowSuccess(true);
-
-      // Slots aktualisieren (Restplätze)
+      // Slots aktualisieren
       const res2 = await fetch(
         `${SCRIPT_URL}?fn=slots&course=${encodeURIComponent(
           selectedCourse
@@ -225,8 +228,8 @@ export default function App() {
           ) : (
             <SlotList
               slots={slots}
-              selected={selectedSlot}
-              onSelect={setSelectedSlot}
+              selected={selectedSlots}
+              onChange={setSelectedSlots}
             />
           )}
         </section>
@@ -356,69 +359,80 @@ function CourseGrid({ courses, selected, onSelect }) {
   );
 }
 
-function SlotList({ slots, selected, onSelect }) {
-  return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      {slots.map((s) => {
-        const key = `${s.date}_${s.time}`;
-        const full = s.remaining <= 0;
-        const isSel =
-          selected && selected.date === s.date && selected.time === s.time;
+function SlotList({ slots, selected, onChange }) {
+  // selected: Array<{date,time}>
+  function isSelected(s) {
+    return selected.some((x) => x.date === s.date && x.time === s.time);
+  }
+  function toggle(s) {
+    const exists = isSelected(s);
+    if (exists) {
+      onChange(
+        selected.filter((x) => !(x.date === s.date && x.time === s.time))
+      );
+    } else {
+      if (selected.length >= 6) return; // Limit
+      onChange([...selected, { date: s.date, time: s.time }]);
+    }
+  }
 
-        return (
-          <button
-            key={key}
-            disabled={full}
-            onClick={() => onSelect({ date: s.date, time: s.time })}
-            className={`text-left transition card card-pad
-              ${full ? "card-muted" : "hover:border-emerald-300"}
-              ${isSel ? "border-emerald-600 bg-emerald-50" : ""}
-              focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`}
-          >
-            <div className="flex items-center justify-between gap-3">
-              {/* links: Datum + Zeit */}
-              <div className="min-w-0">
-                <div className="text-base font-semibold wrap">
-                  {s.date} {s.time}
+  return (
+    <>
+      <div className="mb-3 text-sm text-slate-600">
+        Ausgewählt: <b>{selected.length}</b> / 6
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {slots.map((s) => {
+          const key = `${s.date}_${s.time}`;
+          const full = s.remaining <= 0;
+          const sel = isSelected(s);
+          return (
+            <button
+              key={key}
+              disabled={full}
+              onClick={() => toggle(s)}
+              className={`text-left transition card card-pad
+                ${full ? "card-muted" : "hover:border-emerald-300"}
+                ${sel ? "border-emerald-600 bg-emerald-50" : ""}
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-base font-semibold wrap">
+                    {s.date} {s.time}
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className="text-base font-semibold text-slate-900">
+                    frei: {s.remaining}/{s.capacity}
+                  </span>
+                  <div className={`dot ${full ? "" : "dot-emerald"}`} />
                 </div>
               </div>
-
-              {/* rechts: große Kapazität + Status-Punkt */}
-              <div className="flex shrink-0 items-center gap-3">
-                <span className="text-base font-semibold text-slate-900">
-                  frei: {s.remaining}/{s.capacity}
-                </span>
-                <div className={`dot ${full ? "" : "dot-emerald"}`} />
-              </div>
-            </div>
-          </button>
-        );
-      })}
-    </div>
+            </button>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
 function SuccessModal({ open, details, onClose }) {
   if (!open) return null;
-
-  const d = details || {};
+  const d = details || { slots: [] };
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
     >
-      {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/40"
         onClick={onClose}
         aria-hidden="true"
       />
-
-      {/* Dialog */}
       <div className="relative z-[101] w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
-          {/* simpler Haken */}
           <svg
             width="24"
             height="24"
@@ -434,20 +448,29 @@ function SuccessModal({ open, details, onClose }) {
 
         <h3 className="text-center text-xl font-semibold">Buchung bestätigt</h3>
         <p className="mt-2 text-center text-slate-600">
-          {d.firstName} {d.lastName} wurde erfolgreich eingetragen.
+          {d.firstName} {d.lastName} – Kurs <b>{d.course}</b>
         </p>
 
         <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <div className="text-sm text-slate-500">Kurs</div>
-          <div className="text-base font-semibold">{d.course || "—"}</div>
-
-          <div className="mt-2 text-sm text-slate-500">Termin</div>
-          <div className="text-base font-semibold">
-            {d.date || "—"} {d.time || ""}
-          </div>
+          <div className="text-sm text-slate-500 mb-1">Gebuchte Termine</div>
+          <ul className="space-y-1">
+            {d.slots.map((s, i) => (
+              <li
+                key={i}
+                className={`text-sm ${
+                  s.ok ? "text-slate-900" : "text-red-600"
+                }`}
+              >
+                {s.date} {s.time}{" "}
+                {s.ok
+                  ? ""
+                  : `– fehlgeschlagen (${s.error || "Unbekannter Fehler"})`}
+              </li>
+            ))}
+          </ul>
         </div>
 
-        <div className="mt-6 flex items-center justify-center gap-3">
+        <div className="mt-6 flex items-center justify-center">
           <button className="btn btn-primary" onClick={onClose} autoFocus>
             Alles klar
           </button>
