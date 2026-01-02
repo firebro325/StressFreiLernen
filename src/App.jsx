@@ -168,59 +168,64 @@ export default function App() {
 
   /* ================= Render ================= */
 
-  return (
-      <header className="mx-auto max-w-5xl px-4 py-8 sm:py-10 text-center">
-        <img
-          src="/logo.png"
-          alt="Stressfrei Lernen"
-          className="mx-auto mb-4 h-16 w-auto"
-          decoding="async"
-          loading="eager"
-        />
-      
-        <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-slate-900">
-          Schwimmkurs Ersatztermine
-        </h1>
-      </header>
-    
-      <main className="mx-auto max-w-5xl px-4 pb-16">
-        {/* Schritt 1 */}
-        <section>
-          <h2 className="font-bold mb-3">1) Kurs wählen</h2>
-          {coursesLoading ? (
-            <Skeleton text="Kurse werden geladen…" />
-          ) : courseError ? (
-            <ErrorBox msg={courseError} />
-          ) : (
-            <CourseGrid
-              courses={courses}
-              selected={selectedCourse}
-              onSelect={setSelectedCourse}
-            />
-          )}
-        </section>
+ return (
+  <div className="min-h-screen">
+    <header className="mx-auto max-w-5xl px-4 py-8 sm:py-10 text-center">
+      <img
+        src="/logo.png"
+        alt="Stressfrei Lernen"
+        className="mx-auto mb-4 h-16 w-auto"
+        decoding="async"
+        loading="eager"
+      />
 
-        {/* Schritt 2 */}
-        <section className="mt-10">
-          <h2 className="font-bold mb-3">2) Termin wählen</h2>
-          {!selectedCourse ? (
-            <InfoBox msg="Bitte zuerst einen Kurs wählen." />
-          ) : slotsLoading ? (
-            <Skeleton text="Termine werden geladen…" />
-          ) : (
-            <SlotList
-              slots={slots}
-              selected={selectedSlots}
-              onChange={setSelectedSlots}
-            />
-          )}
-        </section>
+      <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-slate-900">
+        Schwimmkurs Ersatztermine
+      </h1>
+    </header>
 
-        {/* Schritt 3 */}
-        <section className="mt-10">
-          <h2 className="font-bold mb-3">3) Name eingeben</h2>
+    <main className="mx-auto max-w-5xl px-4 pb-16">
+      {/* Schritt 1 */}
+      <section>
+        <h2 className="font-bold mb-3">1) Kurs wählen</h2>
+        {coursesLoading ? (
+          <Skeleton text="Kurse werden geladen…" />
+        ) : courseError ? (
+          <ErrorBox msg={courseError} />
+        ) : (
+          <CourseGrid
+            courses={courses}
+            selected={selectedCourse}
+            onSelect={setSelectedCourse}
+          />
+        )}
+      </section>
 
-          <div className="grid grid-cols-2 gap-4">
+      {/* Schritt 2 */}
+      <section className="mt-10">
+        <h2 className="font-bold mb-3">2) Termin wählen</h2>
+        {!selectedCourse ? (
+          <InfoBox msg="Bitte zuerst einen Kurs wählen." />
+        ) : slotsLoading ? (
+          <Skeleton text="Termine werden geladen…" />
+        ) : (
+          <SlotList
+            slots={slots}
+            selected={selectedSlots}
+            onChange={setSelectedSlots}
+          />
+        )}
+      </section>
+
+      {/* Schritt 3 */}
+      <section className="mt-10">
+        <h2 className="font-bold mb-3">3) Name eingeben</h2>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="block text-sm font-medium text-slate-700">
+              Vorname
+            </label>
             <input
               className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 shadow-sm
                          focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -228,7 +233,12 @@ export default function App() {
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
             />
-            
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700">
+              Nachname
+            </label>
             <input
               className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 shadow-sm
                          focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -237,50 +247,50 @@ export default function App() {
               onChange={(e) => setLastName(e.target.value)}
             />
           </div>
+        </div>
 
-          <div className="mt-6">
-            <button
-              onClick={book}
-              disabled={!canSubmit || bookingState.status === "loading"}
-              className="btn btn-primary"
-            >
-              {bookingState.status === "loading" ? "Buchen…" : "Buchen"}
-            </button>
+        <div className="mt-6">
+          <button
+            onClick={book}
+            disabled={!canSubmit || bookingState.status === "loading"}
+            className="btn btn-primary"
+          >
+            {bookingState.status === "loading" ? "Buchen…" : "Buchen"}
+          </button>
+        </div>
+
+        {bookingState.status !== "idle" && bookingState.status !== "loading" && (
+          <div
+            className={`mt-4 rounded-xl border p-4 ${
+              bookingState.status === "success"
+                ? "border-emerald-200 bg-emerald-50"
+                : "border-red-200 bg-red-50"
+            }`}
+          >
+            <div className="font-bold">{bookingState.title}</div>
+            <div className="text-sm mt-1">{bookingState.message}</div>
+
+            {bookingState.bookings?.length > 0 && (
+              <ul className="mt-2 list-disc pl-5 text-sm">
+                {bookingState.bookings.map((b, i) => (
+                  <li key={i}>
+                    {b.date} {b.time}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
+        )}
+      </section>
+    </main>
 
-          {bookingState.status !== "idle" && bookingState.status !== "loading" && (
-            <div
-              className={`mt-4 rounded-xl border p-4 ${
-                bookingState.status === "success"
-                  ? "border-emerald-200 bg-emerald-50"
-                  : "border-red-200 bg-red-50"
-              }`}
-            >
-              <div className="font-bold">{bookingState.title}</div>
-              <div className="text-sm mt-1">{bookingState.message}</div>
-
-              {bookingState.bookings.length > 0 && (
-                <ul className="mt-2 list-disc pl-5 text-sm">
-                  {bookingState.bookings.map((b, i) => (
-                    <li key={i}>
-                      {b.date} {b.time}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </section>
-      </main>
-
-      <SuccessModal
-        open={showSuccess}
-        details={lastBooking}
-        onClose={() => setShowSuccess(false)}
-      />
-    </div>
-  );
-}
+    <SuccessModal
+      open={showSuccess}
+      details={lastBooking}
+      onClose={() => setShowSuccess(false)}
+    />
+  </div>
+);
 
 /* ================= Komponenten ================= */
 
