@@ -169,11 +169,20 @@ export default function App() {
   /* ================= Render ================= */
 
   return (
-    <div className="min-h-screen">
-      <header className="mx-auto max-w-5xl px-4 py-8 text-center">
-        <h1 className="text-4xl font-extrabold">Schwimmkurs Ersatztermine</h1>
+      <header className="mx-auto max-w-5xl px-4 py-8 sm:py-10 text-center">
+        <img
+          src="/logo.png"
+          alt="Stressfrei Lernen"
+          className="mx-auto mb-4 h-16 w-auto"
+          decoding="async"
+          loading="eager"
+        />
+      
+        <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-slate-900">
+          Schwimmkurs Ersatztermine
+        </h1>
       </header>
-
+    
       <main className="mx-auto max-w-5xl px-4 pb-16">
         {/* Schritt 1 */}
         <section>
@@ -213,16 +222,19 @@ export default function App() {
 
           <div className="grid grid-cols-2 gap-4">
             <input
+              className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 shadow-sm
+                         focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               placeholder="Vorname"
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
-              className="input"
             />
+            
             <input
+              className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 shadow-sm
+                         focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
               placeholder="Nachname"
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
-              className="input"
             />
           </div>
 
