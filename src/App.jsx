@@ -3,6 +3,9 @@ import React, { useEffect, useMemo, useState } from "react";
 const SCRIPT_URL =
   "https://script.google.com/macros/s/AKfycbzkNocTapN9nrCqhUgTx8rAMufYTf5bUUMf-DUEs7GHzoakMzEBBEE0eHUctFI26HCV/exec";
 
+// 🔒 Frontend-Limit
+const MAX_SELECTABLE_SLOTS = 2;
+
 export default function App() {
   const [courses, setCourses] = useState([]);
   const [coursesLoading, setCoursesLoading] = useState(true);
@@ -15,37 +18,27 @@ export default function App() {
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [selectedSlots, setSelectedSlots] = useState([]); // [{date,time}, …]
+  const [selectedSlots, setSelectedSlots] = useState([]);
 
   const [bookingState, setBookingState] = useState({
-    status: "idle",
+    status: "idle", // idle | loading | success | error
+    title: "",
     message: "",
+    bookings: [],
   });
 
-  // Popup nach Erfolg
   const [showSuccess, setShowSuccess] = useState(false);
-  const [lastBooking, setLastBooking] = useState(null); // { course, date, time, firstName, lastName }
+  const [lastBooking, setLastBooking] = useState(null);
 
-  // Kurse laden
+  /* ================= Kurse laden ================= */
+
   useEffect(() => {
     (async () => {
       setCoursesLoading(true);
-      setCourseError("");
       try {
-        const res = await fetch(`${SCRIPT_URL}?fn=courses&_ts=${Date.now()}`, {
-          cache: "no-store",
-        });
-        const txt = await res.text();
-        let data;
-        try {
-          data = JSON.parse(txt);
-        } catch {
-          throw new Error(`Ungültige Antwort vom Server: ${txt.slice(0, 200)}`);
-        }
-        if (!res.ok || !data.ok)
-          throw new Error(
-            data?.error || data?.message || "Kurse konnten nicht geladen werden"
-          );
+        const res = await fetch(`${SCRIPT_URL}?fn=courses&_ts=${Date.now()}`);
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error("Kurse konnten nicht geladen werden");
         setCourses(data.courses || []);
       } catch (e) {
         setCourseError(String(e.message || e));
@@ -55,34 +48,22 @@ export default function App() {
     })();
   }, []);
 
-  // Slots laden, wenn Kurs gewählt
+  /* ================= Slots laden ================= */
+
   useEffect(() => {
     if (!selectedCourse) return;
     (async () => {
       setSlotsLoading(true);
-      setSlotsError("");
       setSlots([]);
       setSelectedSlots([]);
+      setBookingState({ status: "idle", title: "", message: "", bookings: [] });
+
       try {
         const res = await fetch(
-          `${SCRIPT_URL}?fn=slots&course=${encodeURIComponent(
-            selectedCourse
-          )}&_ts=${Date.now()}`,
-          { cache: "no-store" }
+          `${SCRIPT_URL}?fn=slots&course=${encodeURIComponent(selectedCourse)}&_ts=${Date.now()}`
         );
-        const txt = await res.text();
-        let data;
-        try {
-          data = JSON.parse(txt);
-        } catch {
-          throw new Error(`Ungültige Antwort: ${txt.slice(0, 200)}`);
-        }
-        if (!res.ok || !data.ok)
-          throw new Error(
-            data?.error ||
-              data?.message ||
-              "Termine konnten nicht geladen werden"
-          );
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error("Termine konnten nicht geladen werden");
         setSlots(data.slots || []);
       } catch (e) {
         setSlotsError(String(e.message || e));
@@ -92,109 +73,111 @@ export default function App() {
     })();
   }, [selectedCourse]);
 
-  const canSubmit = useMemo(
-    () =>
+  /* ================= Validation ================= */
+
+  const canSubmit = useMemo(() => {
+    return (
       selectedCourse &&
       selectedSlots.length > 0 &&
-      selectedSlots.length <= 6 &&
+      selectedSlots.length <= MAX_SELECTABLE_SLOTS &&
       firstName.trim() &&
-      lastName.trim(),
-    [selectedCourse, selectedSlots, firstName, lastName]
-  );
+      lastName.trim()
+    );
+  }, [selectedCourse, selectedSlots, firstName, lastName]);
+
+  async function refreshSlots() {
+    if (!selectedCourse) return;
+    const res = await fetch(
+      `${SCRIPT_URL}?fn=slots&course=${encodeURIComponent(selectedCourse)}&_ts=${Date.now()}`
+    );
+    const data = await res.json();
+    if (data?.ok) setSlots(data.slots || []);
+  }
+
+  /* ================= Buchung ================= */
 
   async function book() {
     if (!canSubmit) return;
-    setBookingState({ status: "loading", message: "Buchen…" });
+
+    setBookingState({ status: "loading", title: "", message: "Buchen…", bookings: [] });
+
     try {
-      const body = JSON.stringify({
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        course: selectedCourse,
-        slots: selectedSlots, // [{date, time}, …]
-      });
-
-      const res = await fetch(SCRIPT_URL, { method: "POST", body });
-      const txt = await res.text();
-      let data;
-      try {
-        data = JSON.parse(txt);
-      } catch {
-        throw new Error(`Ungültige Antwort: ${txt.slice(0, 200)}`);
-      }
-
-      if (!res.ok || !data.ok) {
-        // Zeige kurze Zusammenfassung, Backend liefert results[]
-        if (data?.error === "TOO_MANY_SLOTS") {
-          throw new Error("Maximal 6 Termine pro Buchung.");
-        }
-        const msg = data?.summary
-          ? `Gebucht: ${data.summary.ok}, fehlgeschlagen: ${data.summary.fail}`
-          : data?.message || "Buchung fehlgeschlagen";
-        setBookingState({ status: "error", message: msg });
-      } else {
-        setBookingState({
-          status: "success",
-          message: `Gebucht: ${data.summary.ok}, fehlgeschlagen: ${data.summary.fail}`,
-        });
-        setLastBooking({
-          course: selectedCourse,
+      const res = await fetch(SCRIPT_URL, {
+        method: "POST",
+        body: JSON.stringify({
           firstName: firstName.trim(),
           lastName: lastName.trim(),
-          slots: data.results.map((r) => ({
-            ...r.slot,
-            ok: r.ok,
-            error: r.error,
-          })),
+          course: selectedCourse,
+          slots: selectedSlots,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        if (data?.error === "MAX_BOOKINGS_REACHED") {
+          setBookingState({
+            status: "error",
+            title: "Maximal 2 Termine möglich",
+            message: data.message,
+            bookings: data.bookings || [],
+          });
+          await refreshSlots();
+          return;
+        }
+
+        setBookingState({
+          status: "error",
+          title: "Buchung fehlgeschlagen",
+          message: data?.message || "Unbekannter Fehler",
+          bookings: [],
         });
-        setShowSuccess(true);
+        await refreshSlots();
+        return;
       }
 
-      // Slots aktualisieren
-      const res2 = await fetch(
-        `${SCRIPT_URL}?fn=slots&course=${encodeURIComponent(
-          selectedCourse
-        )}&_ts=${Date.now()}`,
-        { cache: "no-store" }
-      );
-      const data2 = await res2.json();
-      if (data2?.ok) setSlots(data2.slots || []);
+      setBookingState({
+        status: "success",
+        title: "Buchung erfolgreich",
+        message: `Gebucht: ${data.summary.ok}`,
+        bookings: [],
+      });
+
+      setLastBooking({
+        course: selectedCourse,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        slots: data.results.map((r) => ({
+          ...r.slot,
+          ok: r.ok,
+          error: r.error,
+        })),
+      });
+
+      setShowSuccess(true);
+      await refreshSlots();
     } catch (e) {
-      setBookingState({ status: "error", message: String(e.message || e) });
+      setBookingState({
+        status: "error",
+        title: "Fehler",
+        message: String(e.message || e),
+        bookings: [],
+      });
     }
   }
 
+  /* ================= Render ================= */
+
   return (
     <div className="min-h-screen">
-      <header className="mx-auto max-w-5xl px-4 py-8 sm:py-10 text-center">
-        <img
-          src="/logo.png"
-          alt="Stressfrei Lernen"
-          className="mx-auto mb-4 h-16 w-auto"
-          decoding="async"
-          loading="eager"
-        />
-
-        <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-slate-900">
-          Schwimmkurs Ersatztermine
-        </h1>
-
-        <p className="mt-2 text-sm sm:text-base text-slate-600">
-          Bitte folge den Schritten: <b>1) Kurs wählen</b> →{" "}
-          <b>2) Termin wählen</b> → <b>3) Vor- & Nachname eintragen</b> →{" "}
-          <b>4) Buchen</b>
-        </p>
+      <header className="mx-auto max-w-5xl px-4 py-8 text-center">
+        <h1 className="text-4xl font-extrabold">Schwimmkurs Ersatztermine</h1>
       </header>
 
       <main className="mx-auto max-w-5xl px-4 pb-16">
         {/* Schritt 1 */}
         <section>
-          <div className="mb-3 flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white shadow">
-              1
-            </div>
-            <h2 className="step-title">Kurs wählen</h2>
-          </div>
-
+          <h2 className="font-bold mb-3">1) Kurs wählen</h2>
           {coursesLoading ? (
             <Skeleton text="Kurse werden geladen…" />
           ) : courseError ? (
@@ -210,21 +193,11 @@ export default function App() {
 
         {/* Schritt 2 */}
         <section className="mt-10">
-          <div className="mb-3 flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white shadow">
-              2
-            </div>
-            <h2 className="step-title">Termin wählen</h2>
-          </div>
-
+          <h2 className="font-bold mb-3">2) Termin wählen</h2>
           {!selectedCourse ? (
-            <InfoBox msg="Bitte erst einen Kurs wählen." />
+            <InfoBox msg="Bitte zuerst einen Kurs wählen." />
           ) : slotsLoading ? (
             <Skeleton text="Termine werden geladen…" />
-          ) : slotsError ? (
-            <ErrorBox msg={slotsError} />
-          ) : slots.length === 0 ? (
-            <InfoBox msg="Für diesen Kurs sind momentan keine Termine verfügbar." />
           ) : (
             <SlotList
               slots={slots}
@@ -236,63 +209,58 @@ export default function App() {
 
         {/* Schritt 3 */}
         <section className="mt-10">
-          <div className="mb-3 flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white shadow">
-              3
-            </div>
-            <h2 className="step-title">Vor- & Nachname eintragen</h2>
+          <h2 className="font-bold mb-3">3) Name eingeben</h2>
+
+          <div className="grid grid-cols-2 gap-4">
+            <input
+              placeholder="Vorname"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              className="input"
+            />
+            <input
+              placeholder="Nachname"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              className="input"
+            />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label className="block text-sm font-medium text-slate-700">
-                Vorname
-              </label>
-              <input
-                className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                placeholder="Max"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700">
-                Nachname
-              </label>
-              <input
-                className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                placeholder="Mustermann"
-              />
-            </div>
-          </div>
-
-          <div className="mt-6 flex items-center gap-3">
+          <div className="mt-6">
             <button
               onClick={book}
               disabled={!canSubmit || bookingState.status === "loading"}
-              className={`btn ${
-                canSubmit && bookingState.status !== "loading"
-                  ? "btn-primary"
-                  : "btn-disabled"
-              }`}
+              className="btn btn-primary"
             >
               {bookingState.status === "loading" ? "Buchen…" : "Buchen"}
             </button>
-            {bookingState.status === "success" && (
-              <span className="text-sm font-medium text-green-700">
-                {bookingState.message}
-              </span>
-            )}
-            {bookingState.status === "error" && (
-              <span className="text-sm font-medium text-red-700">
-                {bookingState.message}
-              </span>
-            )}
           </div>
+
+          {bookingState.status !== "idle" && bookingState.status !== "loading" && (
+            <div
+              className={`mt-4 rounded-xl border p-4 ${
+                bookingState.status === "success"
+                  ? "border-emerald-200 bg-emerald-50"
+                  : "border-red-200 bg-red-50"
+              }`}
+            >
+              <div className="font-bold">{bookingState.title}</div>
+              <div className="text-sm mt-1">{bookingState.message}</div>
+
+              {bookingState.bookings.length > 0 && (
+                <ul className="mt-2 list-disc pl-5 text-sm">
+                  {bookingState.bookings.map((b, i) => (
+                    <li key={i}>
+                      {b.date} {b.time}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </section>
       </main>
+
       <SuccessModal
         open={showSuccess}
         details={lastBooking}
@@ -302,179 +270,122 @@ export default function App() {
   );
 }
 
-/* ===== UI-Komponenten (helle Karten) ===== */
-
-function Skeleton({ text }) {
-  return (
-    <div className="card card-pad">
-      <div className="h-4 w-40 animate-pulse rounded bg-slate-200" />
-      <p className="mt-2 text-sm text-slate-600">{text}</p>
-    </div>
-  );
-}
-
-function InfoBox({ msg }) {
-  return (
-    <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-800">
-      {msg}
-    </div>
-  );
-}
-
-function ErrorBox({ msg }) {
-  return (
-    <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">
-      {msg}
-    </div>
-  );
-}
-
-function CourseGrid({ courses, selected, onSelect }) {
-  return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {courses.map((c) => (
-        <button
-          key={c}
-          onClick={() => onSelect(c)}
-          className={`group card card-pad text-left transition
-            ${
-              selected === c
-                ? "border-blue-600 bg-blue-50"
-                : "hover:border-blue-300"
-            }
-            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500`}
-        >
-          <div className="flex items-start justify-between">
-            <div className="min-w-0">
-              <div className="text-base font-semibold ellipsis">{c}</div>
-              <div className="mt-1 text-xs text-slate-600">
-                Klicken, um Termine zu sehen
-              </div>
-            </div>
-            <div className={`dot ${selected === c ? "dot-blue" : ""}`} />
-          </div>
-        </button>
-      ))}
-    </div>
-  );
-}
+/* ================= Komponenten ================= */
 
 function SlotList({ slots, selected, onChange }) {
-  // selected: Array<{date,time}>
+  const grouped = useMemo(() => {
+    const map = {};
+    for (const s of slots) {
+      if (!map[s.date]) map[s.date] = [];
+      map[s.date].push(s);
+    }
+    Object.values(map).forEach((arr) =>
+      arr.sort((a, b) => a.time.localeCompare(b.time))
+    );
+    return map;
+  }, [slots]);
+
+  const dates = Object.keys(grouped);
+
   function isSelected(s) {
     return selected.some((x) => x.date === s.date && x.time === s.time);
   }
+
   function toggle(s) {
-    const exists = isSelected(s);
-    if (exists) {
-      onChange(
-        selected.filter((x) => !(x.date === s.date && x.time === s.time))
-      );
+    if (isSelected(s)) {
+      onChange(selected.filter((x) => !(x.date === s.date && x.time === s.time)));
     } else {
-      if (selected.length >= 6) return; // Limit
+      if (selected.length >= MAX_SELECTABLE_SLOTS) return;
       onChange([...selected, { date: s.date, time: s.time }]);
     }
   }
 
   return (
     <>
-      <div className="mb-3 text-sm text-slate-600">
-        Ausgewählt: <b>{selected.length}</b> / 6
+      <div className="mb-2 text-sm">
+        Ausgewählt: <b>{selected.length}</b> / {MAX_SELECTABLE_SLOTS}
       </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {slots.map((s) => {
-          const key = `${s.date}_${s.time}`;
-          const full = s.remaining <= 0;
-          const sel = isSelected(s);
-          return (
-            <button
-              key={key}
-              disabled={full}
-              onClick={() => toggle(s)}
-              className={`text-left transition card card-pad
-                ${full ? "card-muted" : "hover:border-emerald-300"}
-                ${sel ? "border-emerald-600 bg-emerald-50" : ""}
-                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="text-base font-semibold wrap">
-                    {s.date} {s.time}
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <span className="text-base font-semibold text-slate-900">
-                    frei: {s.remaining}/{s.capacity}
-                  </span>
-                  <div className={`dot ${full ? "" : "dot-emerald"}`} />
-                </div>
-              </div>
-            </button>
-          );
-        })}
+
+      <div className="space-y-6">
+        {dates.map((date) => (
+          <div key={date}>
+            <div className="font-bold mb-2">{date}</div>
+            <div className="grid grid-cols-2 gap-3">
+              {grouped[date].map((s) => {
+                const full = s.remaining <= 0;
+                const sel = isSelected(s);
+                return (
+                  <button
+                    key={`${s.date}_${s.time}`}
+                    disabled={full}
+                    onClick={() => toggle(s)}
+                    className={`card p-3 text-left ${
+                      sel ? "border-emerald-600 bg-emerald-50" : ""
+                    }`}
+                  >
+                    <div className="flex justify-between">
+                      <span>
+                        {s.date} {s.time}
+                      </span>
+                      <span>
+                        frei: {s.remaining}/{s.capacity}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
     </>
   );
 }
 
+function CourseGrid({ courses, selected, onSelect }) {
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      {courses.map((c) => (
+        <button
+          key={c}
+          onClick={() => onSelect(c)}
+          className={`card p-4 ${selected === c ? "border-blue-600 bg-blue-50" : ""}`}
+        >
+          {c}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Skeleton({ text }) {
+  return <div className="card p-4 text-slate-500">{text}</div>;
+}
+
+function InfoBox({ msg }) {
+  return <div className="card p-4 bg-blue-50">{msg}</div>;
+}
+
+function ErrorBox({ msg }) {
+  return <div className="card p-4 bg-red-50">{msg}</div>;
+}
+
 function SuccessModal({ open, details, onClose }) {
   if (!open) return null;
-  const d = details || { slots: [] };
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-    >
-      <div
-        className="absolute inset-0 bg-black/40"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <div className="relative z-[101] w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
-          <svg
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            className="text-emerald-600"
-          >
-            <path
-              fill="currentColor"
-              d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"
-            />
-          </svg>
-        </div>
-
-        <h3 className="text-center text-xl font-semibold">Buchung bestätigt</h3>
-        <p className="mt-2 text-center text-slate-600">
-          {d.firstName} {d.lastName} – Kurs <b>{d.course}</b>
-        </p>
-
-        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <div className="text-sm text-slate-500 mb-1">Gebuchte Termine</div>
-          <ul className="space-y-1">
-            {d.slots.map((s, i) => (
-              <li
-                key={i}
-                className={`text-sm ${
-                  s.ok ? "text-slate-900" : "text-red-600"
-                }`}
-              >
-                {s.date} {s.time}{" "}
-                {s.ok
-                  ? ""
-                  : `– fehlgeschlagen (${s.error || "Unbekannter Fehler"})`}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="mt-6 flex items-center justify-center">
-          <button className="btn btn-primary" onClick={onClose} autoFocus>
-            Alles klar
-          </button>
-        </div>
+    <div className="fixed inset-0 flex items-center justify-center bg-black/40">
+      <div className="bg-white p-6 rounded-xl max-w-md w-full">
+        <h3 className="font-bold text-lg mb-2">Buchung bestätigt</h3>
+        <ul className="text-sm">
+          {details.slots.map((s, i) => (
+            <li key={i}>
+              {s.date} {s.time}
+            </li>
+          ))}
+        </ul>
+        <button onClick={onClose} className="btn btn-primary mt-4">
+          OK
+        </button>
       </div>
     </div>
   );
