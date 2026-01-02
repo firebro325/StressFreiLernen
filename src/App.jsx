@@ -191,13 +191,13 @@ export default function App() {
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <input
-              className="rounded-xl border px-3 py-2"
+              className="rounded-xl border border-slate-300 px-3 py-2"
               placeholder="Vorname"
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
             />
             <input
-              className="rounded-xl border px-3 py-2"
+              className="rounded-xl border border-slate-300 px-3 py-2"
               placeholder="Nachname"
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
@@ -251,11 +251,13 @@ function SlotList({ slots, selected, onChange }) {
     return map;
   }, [slots]);
 
+  function isSelected(s) {
+    return selected.some((x) => x.date === s.date && x.time === s.time);
+  }
+
   function toggle(s) {
-    const exists = selected.some(
-      (x) => x.date === s.date && x.time === s.time
-    );
-    if (exists) {
+    const sel = isSelected(s);
+    if (sel) {
       onChange(selected.filter((x) => !(x.date === s.date && x.time === s.time)));
     } else if (selected.length < MAX_SELECTABLE_SLOTS) {
       onChange([...selected, { date: s.date, time: s.time }]);
@@ -264,23 +266,39 @@ function SlotList({ slots, selected, onChange }) {
 
   return (
     <>
-      <div className="text-sm mb-2">
-        Ausgewählt: {selected.length} / {MAX_SELECTABLE_SLOTS}
+      <div className="text-sm mb-3">
+        Ausgewählt: <b>{selected.length}</b> / {MAX_SELECTABLE_SLOTS}
       </div>
 
       {Object.keys(grouped).map((date) => (
-        <div key={date} className="mb-4">
+        <div key={date} className="mb-6">
           <div className="font-bold mb-2">{date}</div>
-          <div className="grid grid-cols-2 gap-3">
-            {grouped[date].map((s) => (
-              <button
-                key={`${s.date}-${s.time}`}
-                onClick={() => toggle(s)}
-                className="card p-3 text-left"
-              >
-                {s.time} – frei: {s.remaining}
-              </button>
-            ))}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {grouped[date].map((s) => {
+              const sel = isSelected(s);
+              const full = Number(s.remaining) <= 0;
+              const blocked = !sel && selected.length >= MAX_SELECTABLE_SLOTS;
+
+              return (
+                <button
+                  key={`${s.date}-${s.time}`}
+                  onClick={() => toggle(s)}
+                  disabled={full || blocked}
+                  className={`card p-3 text-left transition
+                    ${sel ? "border-emerald-600 bg-emerald-50" : ""}
+                    ${full || blocked ? "opacity-50 cursor-not-allowed" : "hover:border-emerald-300"}
+                  `}
+                >
+                  <div className="flex justify-between">
+                    <span>{s.time}</span>
+                    <span>
+                      frei: {s.remaining}/{s.capacity}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       ))}
@@ -290,12 +308,14 @@ function SlotList({ slots, selected, onChange }) {
 
 function CourseGrid({ courses, selected, onSelect }) {
   return (
-    <div className="grid grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       {courses.map((c) => (
         <button
           key={c}
           onClick={() => onSelect(c)}
-          className={`card p-4 ${selected === c ? "bg-blue-50" : ""}`}
+          className={`card p-4 ${
+            selected === c ? "border-blue-600 bg-blue-50" : ""
+          }`}
         >
           {c}
         </button>
