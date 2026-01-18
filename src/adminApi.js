@@ -1,4 +1,5 @@
-const SCRIPT_URL = "DEIN_SCRIPT_URL_HIER"; // genau wie in eurem User-Frontend
+const SCRIPT_URL =
+  "https://script.google.com/macros/s/AKfycbzkNocTapN9nrCqhUgTx8rAMufYTf5bUUMf-DUEs7GHzoakMzEBBEE0eHUctFI26HCV/exec";
 
 export async function adminLogin(username, password) {
   const res = await fetch(SCRIPT_URL, {
