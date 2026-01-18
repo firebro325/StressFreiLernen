@@ -39,7 +39,15 @@ export default function AdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn, sortDir]);
 
-  const displayed = useMemo(() => rows, [rows]);
+  const grouped = useMemo(() => {
+  const map = {};
+  for (const r of rows) {
+    if (!map[r.date]) map[r.date] = [];
+    map[r.date].push(r);
+  }
+  return map;
+}, [rows]);
+
 
   async function onLogin(e) {
     e.preventDefault();
@@ -173,29 +181,48 @@ export default function AdminPage() {
             </tr>
           </thead>
           <tbody>
-            {displayed.map((r) => (
-              <tr key={r.id} style={{ borderTop: "1px solid #ddd" }}>
-                <Td>{r.date}</Td>
-                <Td>{r.time}</Td>
-                <Td>{r.course}</Td>
-                <Td>{r.firstName} {r.lastName}</Td>
-                <Td style={{ opacity: 0.75 }}>{r.timestamp}</Td>
-                <Td>
-                  <button onClick={() => onDelete(r)} disabled={loading} style={{ padding: "6px 10px" }}>
-                    Löschen
-                  </button>
-                </Td>
-              </tr>
-            ))}
-
-            {!loading && displayed.length === 0 && (
-              <tr>
-                <Td colSpan={6} style={{ padding: 14, opacity: 0.7 }}>
-                  Keine Buchungen gefunden.
-                </Td>
-              </tr>
-            )}
-          </tbody>
+              {Object.entries(grouped).map(([date, items]) => (
+                <React.Fragment key={date}>
+                  {/* Datums-Header */}
+                  <tr style={{ background: "#f4f6f8" }}>
+                    <td
+                      colSpan={6}
+                      style={{
+                        padding: "12px 8px",
+                        fontWeight: "bold",
+                        borderTop: "2px solid #bbb",
+                      }}
+                    >
+                      📅 {date}
+                    </td>
+                  </tr>
+            
+                  {items.map((r) => (
+                    <tr key={r.id} style={{ borderTop: "1px solid #ddd" }}>
+                      <Td>{r.date}</Td>
+                      <Td>{r.time}</Td>
+                      <Td>{r.course}</Td>
+                      <Td>{r.firstName} {r.lastName}</Td>
+                      <Td style={{ opacity: 0.75 }}>{r.timestamp}</Td>
+                      <Td>
+                        <button
+                          onClick={() => onDelete(r)}
+                          disabled={loading}
+                          style={{ padding: "6px 10px" }}
+                        >
+                          Löschen
+                        </button>
+                      </Td>
+                    </tr>
+                  ))}
+            
+                  {/* Extra Abstand nach jedem Datum */}
+                  <tr>
+                    <td colSpan={6} style={{ height: 10 }} />
+                  </tr>
+                </React.Fragment>
+              ))}
+        </tbody>
         </table>
       </div>
     </div>
