@@ -25,11 +25,10 @@ export default function AdminPage() {
       if (!data.ok) throw new Error(data.error || "Failed to load");
       setRows(data.rows || []);
     } catch (e) {
-      setError(String(e.message || e));
-      // wenn Token abgelaufen -> direkt ausloggen
-      if (String(e.message || "").toLowerCase().includes("unauthorized")) {
-        onLogout();
-      }
+      const msg = String(e.message || e);
+      setError(msg);
+      // Token abgelaufen / ungültig
+      if (msg.toLowerCase().includes("unauthorized")) onLogout();
     } finally {
       setLoading(false);
     }
@@ -92,7 +91,7 @@ export default function AdminPage() {
 
   if (!isLoggedIn) {
     return (
-      <div style={{ maxWidth: 420, margin: "40px auto", padding: 16 }}>
+      <div style={{ maxWidth: 420, margin: "40px auto", padding: 16, fontFamily: "system-ui, Arial" }}>
         <h2>Admin Login</h2>
 
         <form onSubmit={onLogin}>
@@ -101,7 +100,7 @@ export default function AdminPage() {
             <input
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              style={{ width: "100%", padding: 10 }}
+              style={{ width: "100%", padding: 10, marginTop: 6 }}
               autoComplete="username"
             />
           </div>
@@ -112,7 +111,7 @@ export default function AdminPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              style={{ width: "100%", padding: 10 }}
+              style={{ width: "100%", padding: 10, marginTop: 6 }}
               autoComplete="current-password"
             />
           </div>
@@ -128,7 +127,7 @@ export default function AdminPage() {
   }
 
   return (
-    <div style={{ maxWidth: 1100, margin: "24px auto", padding: 16 }}>
+    <div style={{ maxWidth: 1100, margin: "24px auto", padding: 16, fontFamily: "system-ui, Arial" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
         <h2>Admin – Buchungen</h2>
         <button onClick={onLogout} style={{ padding: "8px 12px" }}>
@@ -182,16 +181,13 @@ export default function AdminPage() {
                 <Td>{r.firstName} {r.lastName}</Td>
                 <Td style={{ opacity: 0.75 }}>{r.timestamp}</Td>
                 <Td>
-                  <button
-                    onClick={() => onDelete(r)}
-                    disabled={loading}
-                    style={{ padding: "6px 10px" }}
-                  >
+                  <button onClick={() => onDelete(r)} disabled={loading} style={{ padding: "6px 10px" }}>
                     Löschen
                   </button>
                 </Td>
               </tr>
             ))}
+
             {!loading && displayed.length === 0 && (
               <tr>
                 <Td colSpan={6} style={{ padding: 14, opacity: 0.7 }}>
